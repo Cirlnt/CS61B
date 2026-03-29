@@ -5,7 +5,7 @@ import java.util.Observable;
 
 
 /** The state of a game of 2048.
- *  @author TODO: YOUR NAME HERE
+ *  @author Cirlnt
  */
 public class Model extends Observable {
     /** Current contents of the board. */
@@ -113,6 +113,67 @@ public class Model extends Observable {
         // TODO: Modify this.board (and perhaps this.score) to account
         // for the tilt to the Side SIDE. If the board changed, set the
         // changed local variable to true.
+        // 1. 视角转换：把四个方向的问题简化为“向上移动”
+        board.setViewingPerspective(side);
+
+        int len = board.size();
+
+        // 2. 遍历每一列
+        for (int c = 0; c < len; c++) {
+            // 从倒数第二行开始，自下而上遍历
+            // (因为最顶行的格子没法往上走了)
+            for (int r = len - 2; r >= 0; r--) {
+
+                Tile current = board.tile(c, r);
+                if (current == null) {
+                    continue; // 空格子跳过
+                }
+
+                // 3. 寻找“碰撞点”
+                // 我们想知道这个格子往上走，最终会撞到什么
+                int targetR = r + 1;
+
+                // 只要上面是空的，就一直往上找
+                while (targetR < len && board.tile(c, targetR) == null) {
+                    targetR++;
+                }
+
+                // 循环结束后，targetR 指向的是：
+                // 情况A: 一个非空格子 (障碍物)
+                // 情况B: 越界了 (targetR == len，说明上面全是空的)
+
+                // 4. 判断逻辑
+
+                // 【情况A】：撞到了非空格子，检查是否可以合并
+                if (targetR < len && board.tile(c, targetR).value() == current.value()) {
+                    // 尝试合并
+                    // board.move 返回 true 表示发生了合并
+                    if (board.move(c, targetR, current)) {
+                        score += current.value() * 2;
+                        changed = true;
+
+                        // 【核心修复点】
+                        // 合并后，必须立刻结束当前格子的处理！
+                        // 否则代码会继续向下执行，导致逻辑错误（如二次合并）
+                        continue;
+                    }
+                }
+
+                // 【情况B 或 无法合并】：普通移动
+                // 如果不能合并（撞到了不同数字，或者撞墙了），
+                // 我们应该停在“障碍物”的下面一格，也就是 targetR - 1
+                targetR--;
+
+                // 只有当目标位置不等于当前位置时，才执行移动
+                if (targetR != r) {
+                    board.move(c, targetR, current);
+                    changed = true;
+                }
+            }
+        }
+
+        // 5. 恢复视角
+        board.setViewingPerspective(Side.NORTH);
 
         checkGameOver();
         if (changed) {
@@ -120,7 +181,6 @@ public class Model extends Observable {
         }
         return changed;
     }
-
     /** Checks if the game is over and sets the gameOver variable
      *  appropriately.
      */
@@ -137,7 +197,14 @@ public class Model extends Observable {
      *  Empty spaces are stored as null.
      * */
     public static boolean emptySpaceExists(Board b) {
-        // TODO: Fill in this function.
+        int size = b.size();
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                    if (b.tile(i, j)== null) {
+                        return true;
+                    };
+                }
+        }
         return false;
     }
 
@@ -147,7 +214,16 @@ public class Model extends Observable {
      * given a Tile object t, we get its value with t.value().
      */
     public static boolean maxTileExists(Board b) {
-        // TODO: Fill in this function.
+        int size = b.size();
+        for (int i = 0; i < size; i++) {
+            for (int j = 0; j < size; j++) {
+                if (b.tile(i, j)!= null) {
+                    if (b.tile(i, j).value()==MAX_PIECE) {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
@@ -158,7 +234,38 @@ public class Model extends Observable {
      * 2. There are two adjacent tiles with the same value.
      */
     public static boolean atLeastOneMoveExists(Board b) {
-        // TODO: Fill in this function.
+        if (emptySpaceExists(b)) {
+            return true;
+        }
+        else {
+            int size = b.size();
+            for (int i = 0; i < size; i++) {
+                for (int j = 0; j < size; j++) {
+                    Tile current = b.tile(i, j);
+
+                    for (Side s : Side.values()) {
+                        int ni = i;
+                        int nj = j;
+
+                        if (s == Side.NORTH) {
+                            ni = i + 1;
+                        } else if (s == Side.SOUTH) {
+                            ni = i - 1;
+                        } else if (s == Side.EAST) {
+                            nj = j + 1;
+                        } else if (s == Side.WEST) {
+                            nj = j - 1;
+                        }
+                        if (ni >=0 && nj >= 0 && nj < size && ni < size) {
+                            Tile next = b.tile(ni, nj);
+                            if (next != null &&next.value() == current.value()) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return false;
     }
 
