@@ -110,75 +110,76 @@ public class Model extends Observable {
         boolean changed;
         changed = false;
 
-        // TODO: Modify this.board (and perhaps this.score) to account
-        // for the tilt to the Side SIDE. If the board changed, set the
-        // changed local variable to true.
-        // 1. 视角转换：把四个方向的问题简化为“向上移动”
         board.setViewingPerspective(side);
+        int size = board.size();
 
-        int len = board.size();
+        // 外层循环是列 (c)
+        for (int c = 0; c < size; c++) {
 
-        // 2. 遍历每一列
-        for (int c = 0; c < len; c++) {
-            // 从倒数第二行开始，自下而上遍历
-            // (因为最顶行的格子没法往上走了)
-            for (int r = len - 2; r >= 0; r--) {
+            // --- 关键修正点 ---
+            // 1. merged 数组必须在【列循环内部】声明
+            // 这样每一列都有自己独立的合并记录，互不影响
+            boolean[] merged = new boolean[size];
 
+            // 内层循环是行 (r)，自下而上
+            for (int r = size - 2; r >= 0; r--) {
                 Tile current = board.tile(c, r);
-                if (current == null) {
-                    continue; // 空格子跳过
-                }
+                if (current == null) continue;
 
-                // 3. 寻找“碰撞点”
-                // 我们想知道这个格子往上走，最终会撞到什么
+                // 寻找目标行
                 int targetR = r + 1;
-
-                // 只要上面是空的，就一直往上找
-                while (targetR < len && board.tile(c, targetR) == null) {
+                while (targetR < size && board.tile(c, targetR) == null) {
                     targetR++;
                 }
 
-                // 循环结束后，targetR 指向的是：
-                // 情况A: 一个非空格子 (障碍物)
-                // 情况B: 越界了 (targetR == len，说明上面全是空的)
-
-                // 4. 判断逻辑
-
-                // 【情况A】：撞到了非空格子，检查是否可以合并
-                if (targetR < len && board.tile(c, targetR).value() == current.value()) {
-                    // 尝试合并
-                    // board.move 返回 true 表示发生了合并
-                    if (board.move(c, targetR, current)) {
-                        score += current.value() * 2;
+                // 情况 A：上方全是空的，滑到最顶
+                if (targetR == size) {
+                    if (r != size - 1) {
+                        board.move(c, size - 1, current);
                         changed = true;
-
-                        // 【核心修复点】
-                        // 合并后，必须立刻结束当前格子的处理！
-                        // 否则代码会继续向下执行，导致逻辑错误（如二次合并）
-                        continue;
                     }
                 }
+                // 情况 B：撞到了非空格子
+                else {
+                    Tile targetTile = board.tile(c, targetR);
 
-                // 【情况B 或 无法合并】：普通移动
-                // 如果不能合并（撞到了不同数字，或者撞墙了），
-                // 我们应该停在“障碍物”的下面一格，也就是 targetR - 1
-                targetR--;
+                    // 1. 检查值是否相等
+                    if (targetTile.value() == current.value()) {
 
-                // 只有当目标位置不等于当前位置时，才执行移动
-                if (targetR != r) {
-                    board.move(c, targetR, current);
-                    changed = true;
+                        // 2. 检查目标格子是否已经被合并过了
+                        if (!merged[targetR]) {
+                            // 可以合并！
+                            board.move(c, targetR, current);
+                            changed = true;
+                            score += current.value() * 2;
+
+                            // --- 关键修正点 ---
+                            // 3. 标记【目标位置】已经被合并了
+                            // 这样后续的格子就不会再和这个新生成的格子合并
+                            merged[targetR] = true;
+                        } else {
+                            // 目标格子已经被合并过了，不能再次合并
+                            // 只能移动到它下面一格
+                            targetR--;
+                            if (targetR != r) {
+                                board.move(c, targetR, current);
+                                changed = true;
+                            }
+                        }
+                    }
+                    // 值不相等，只能移动
+                    else {
+                        targetR--;
+                        if (targetR != r) {
+                            board.move(c, targetR, current);
+                            changed = true;
+                        }
+                    }
                 }
             }
         }
 
-        // 5. 恢复视角
         board.setViewingPerspective(Side.NORTH);
-
-        checkGameOver();
-        if (changed) {
-            setChanged();
-        }
         return changed;
     }
     /** Checks if the game is over and sets the gameOver variable
