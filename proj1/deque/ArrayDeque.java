@@ -11,11 +11,15 @@ public class ArrayDeque<T> implements Deque<T>, Iterable<T> {
 
 
     //    构建数组
-    public ArrayDeque() {
-        a = (T[]) new Object[8];
+    public ArrayDeque(int capacity) {
+        a = (T[]) new Object[capacity];
         head = 0;
         tail = 0;
         size = 0;
+    }
+
+    public ArrayDeque() {
+        this(8);
     }
 
 
