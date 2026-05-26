@@ -1,6 +1,8 @@
 package capers;
 
 import java.io.File;
+import java.io.IOException;
+
 import static capers.Utils.*;
 
 /** A repository for Capers 
@@ -20,7 +22,7 @@ public class CapersRepository {
 //    static final File CAPERS_FOLDER = null;
     static final File capers = Utils.join(".capers");
     static final File dogs = Utils.join(".capers","dogs");
-    static final File story = Utils.join(".capers","story");
+    static final File story = new File(capers, "story");
 
     /**
      * Does required filesystem operations to allow for persistence.
@@ -32,17 +34,6 @@ public class CapersRepository {
      *    - story -- file containing the current story
      */
     public static void setupPersistence() {
-//        if (!capers.exists()) {
-//            capers.mkdir();
-//            dogs.mkdir();
-//            story.mkdir();
-//        }
-//        if (!dogs.exists()) {
-//            dogs.mkdir();
-//        }
-//        if (!story.exists()) {
-//            story.mkdir();
-//        }
         if (!capers.exists()) {
             if (!capers.mkdirs()) {
                 throw new RuntimeException("Failed to create directory: " + capers);
@@ -54,8 +45,10 @@ public class CapersRepository {
             }
         }
         if (!story.exists()) {
-            if (!story.mkdirs()) {
-                throw new RuntimeException("Failed to create directory: " + story);
+            try {
+                story.createNewFile(); // 创建空文件
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to create story file", e);
             }
         }
     }
@@ -71,7 +64,7 @@ public class CapersRepository {
         if (!old.isEmpty()) {
             newText = old+"\n"+text;
         }
-        System.out.println(text);
+        System.out.println(newText);
         Utils.writeContents(story,newText);
     }
 
@@ -81,7 +74,12 @@ public class CapersRepository {
      * Also prints out the dog's information using toString().
      */
     public static void makeDog(String name, String breed, int age) {
-        Utils.writeContents(dogs,name,breed,age);
+        Dog dog = new Dog(name,breed,age);
+        System.out.println(dog.toString());
+        File DogName= new File(dogs, name);
+        //不能存dog对象，只能存字符串，所以需要把dog变成字符串
+//        Utils.writeContents(DogName,dog.toString());
+        writeObject(DogName,dog);
     }
 
     /**
@@ -91,6 +89,7 @@ public class CapersRepository {
      * @param name String name of the Dog whose birthday we're celebrating.
      */
     public static void celebrateBirthday(String name) {
+        //错过的问题：目前的问题好像是在makedog的时候将dog的信息是以字符串的形式写入，但是在dog.java里面我用的是序列化对象，也就是说我用字符串写，用序列化读需要改变(只有第一次可能),改变想法初步为用dog.java里面的save函数处理，记住需要改变makedog里面
         Dog dog = Dog.fromFile(name);
         dog.haveBirthday();
         dog.saveDog();

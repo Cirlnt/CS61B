@@ -68,6 +68,7 @@ class Utils {
             }
             str.close();
         } catch (IOException | ClassCastException excp) {
+            System.out.println("异常类型：" + excp.getClass().getName());
             throw new IllegalArgumentException(excp.getMessage());
         }
     }
@@ -84,6 +85,7 @@ class Utils {
             return result;
         } catch (IOException | ClassCastException
                 | ClassNotFoundException excp) {
+            System.out.println("异常类型：" + excp.getClass().getName());
             throw new IllegalArgumentException(excp.getMessage());
         }
     }
