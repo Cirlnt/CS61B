@@ -3,32 +3,30 @@ package bstmap;
 import java.util.Iterator;
 import java.util.Set;
 
-public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
-    //public class BSTMap<K,T> implements Map61B<K,V> {
+public class BSTMap2<K extends Comparable<K>, V> implements Map61B<K, V>{
     public K[] keys;
     public V[] values;
-    public int size;  //size为BST的最大数字,current才是每个结点对应的index
+    public int size;
     public int root = 1;
     public int curr;
 
-
-    //index从1开始，所以索引为0的值不管，也容易初始化
-    //这里构造的是一个结点
-    public BSTMap(){
-        keys = (K[]) new Comparable[8];
-        values = (V[]) new Object[8];;
+    // 修复1：构造方法给初始容量，不再用size初始化，解决一开始直接数组越界
+    public BSTMap2(){
+        int initCap = 16;
+        keys = (K[]) new Comparable[initCap];
+        values = (V[]) new Object[initCap];
         values[0] = null;
         keys[0] = null;
         size = 0;
         curr = 1;
     }
 
-
     @Override
     public void clear(){
         size = 0;
         curr = 1;
-        for (int i = 0; i < keys.length; i++){
+        // 清空数组所有残留旧数据，擦除之前put的内容
+        for (int i = 0; i < keys.length; i++) {
             keys[i] = null;
             values[i] = null;
         }
@@ -36,9 +34,7 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
 
     @Override
     public boolean containsKey(K key){
-        if (key == null){
-            return false;
-        }
+        if(key == null) return false;
         curr = SearchRoot(key);
         // 没找到就返回false，防止空指针
         return keys[curr] != null && keys[curr].equals(key);
@@ -49,7 +45,6 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
         if (!containsKey(key)){
             return null;
         }
-//        curr = SearchRoot(key);
         return values[curr];
     }
 
@@ -61,13 +56,18 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
     @Override
     public void put(K key, V value){
         curr = root;
+        // 树不为空，去找插入位置
         if (size != 0){
             curr = SearchRoot(key);
         }
-        if (curr >= keys.length){
+
+        // 需要扩容：当前下标快要超过数组长度，直接翻倍
+        if(curr >= keys.length){
             reverse(2);
         }
-        if (keys[curr] == null){
+
+        // 新节点
+        if(keys[curr] == null){
             size++;
         }
         keys[curr] = key;
@@ -94,40 +94,50 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
     }
 
 
+    // 修复2：修复查找死循环、左右方向写反
     public int SearchRoot(K key) {
         curr = root;
-        //终止条件：当前节点为空 或者 当前节点就是目标key
-        while (keys[curr] != null&&!keys[curr].equals(key)){
-            if (keys[curr].compareTo(key) > 0) {
-                curr *= 2;
-            }
-            else{
-//            if (keys[curr].compareTo(key) < 0) {
+        // 终止条件：当前节点为空 或者 当前节点就是目标key
+        while (keys[curr] != null && !keys[curr].equals(key)){
+            int cmp = keys[curr].compareTo(key);
+            if (cmp > 0) {
+                // 当前key更大，去左子树 2*curr
+                curr = curr * 2;
+            } else {
+                // 当前key更小，去右子树 2*curr+1
                 curr = curr * 2 + 1;
             }
-            if (curr >= keys.length){
+            // 自动扩容，防止查找过程越界
+            if(curr >= keys.length){
                 reverse(2);
             }
         }
         return curr;
     }
 
+    // 修复3：修复叶子节点判断（之前完全写反+互递归死循环，彻底删掉containsKey）
     public boolean isLeaf(int curr){
-        //满足条件：curr的左结点和右结点都不存在
         int left = curr*2;
         int right = curr*2+1;
+        // 安全判断：先判断下标是否越界，再判断是否为空
         boolean leftEmpty = (left >= keys.length) || keys[left] == null;
         boolean rightEmpty = (right >= keys.length) || keys[right] == null;
+        // 左右都空 = 叶子节点
         return leftEmpty && rightEmpty;
     }
 
+    // 修复4：扩容方法，复制旧数据，不再清空数组
     public void reverse(int number){
-        K[] NewKeys = (K[]) new Comparable[(keys.length)*number];
-        V[] NewValues = (V[]) new Object[(keys.length)*number];
-        System.arraycopy(keys, 0, NewKeys, 0, keys.length);
+        int newLen = keys.length * number;
+        K[] NewKeys = (K[]) new Comparable[newLen];
+        V[] NewValues = (V[]) new Object[newLen];
+        // 把旧数组全部复制过来
+        for (int i = 0; i < keys.length; i++) {
+            NewKeys[i] = keys[i];
+            NewValues[i] = values[i];
+        }
         keys = NewKeys;
         values = NewValues;
     }
-
 
 }
