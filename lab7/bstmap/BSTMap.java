@@ -1,5 +1,6 @@
 package bstmap;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -39,6 +40,13 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
         if (key == null){
             return false;
         }
+//        Set<K> keySet = keySet();
+//        for (K k : keySet){
+//            if (key.equals(k)){
+//                return true;
+//            }
+//        }
+//        return false;
         curr = SearchRoot(key);
         // 没找到就返回false，防止空指针
         return keys[curr] != null && keys[curr].equals(key);
@@ -76,16 +84,53 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
 
     @Override
     public Set<K> keySet() {
-        throw new UnsupportedOperationException("Not supported yet.");
+        Set<K> set = new HashSet<K>();
+        for (int i = 0; i < keys.length; i++){
+            if (keys[i] != null){
+                set.add(keys[i]);
+            }
+        }
+        return set;
     }
 
     @Override
     public V remove(K key){
-        throw new UnsupportedOperationException();
+        if (key == null){
+            return null;
+        }
+        curr = SearchRoot(key);
+        if (curr >= keys.length){
+            return null;
+        }
+        V value = values[curr];
+        keys[curr] = null;
+        values[curr] = null;
+        size--;
+        if (keys[root] == null){
+            ChangeRoot();
+        }
+        return value;
     }
 
+    @Override
     public V remove(K key, V value){
-        throw new UnsupportedOperationException("Not supported yet.");
+        if (key == null){
+            return null;
+        }
+        curr = SearchRoot(key);
+        if (curr >= keys.length){
+            return null;
+        }
+        V Value = values[curr];
+        if (Value.equals(value)){
+            keys[curr] = null;
+            values[curr] = null;
+            size--;
+        }
+        if (keys[root] == null){
+            ChangeRoot();
+        }
+        return value;
     }
 
     @Override
@@ -128,6 +173,69 @@ public class BSTMap<K extends Comparable<K>, V> implements Map61B<K, V>{
         keys = NewKeys;
         values = NewValues;
     }
+
+    public void ChangeRoot(){
+        int rootIdx = 1;
+        //这里的Root为左子树的最大值
+        int LMax = root*2;
+        // 左子树为空，改用右节点顶替
+        if (LMax >= keys.length || keys[LMax] == null) {
+            int rightNode = rootIdx * 2 + 1;
+            if (rightNode < keys.length) {
+                keys[rootIdx] = keys[rightNode];
+                values[rootIdx] = values[rightNode];
+                keys[rightNode] = null;
+                values[rightNode] = null;
+            }
+            return;
+        }
+        //一直往右子树看，直到为null
+        while (true){
+            int right = LMax*2+1;
+            if (right >= keys.length || keys[right] == null) {
+                break;
+            }
+            LMax = right;
+        }
+        keys[1] =  keys[LMax];
+        values[1] = values[LMax];
+        //========= 修复：递归清空/承接多层左子树 =========
+        clearLeftSubTree(LMax);
+
+    }
+
+    // 清空指定节点，并把它的左子树依次上移
+    private void clearLeftSubTree(int idx) {
+        int left = idx * 2;
+        // 没有左子树，直接置空当前节点
+        if (left >= keys.length || keys[left] == null) {
+            keys[idx] = null;
+            values[idx] = null;
+            return;
+        }
+        // 左孩子顶替当前位置
+        keys[idx] = keys[left];
+        values[idx] = values[left];
+        // 递归处理原左孩子的位置（继续承接它的子树）
+        clearLeftSubTree(left);
+        clearRightSubTree(idx*2+1);
+    }
+
+    private void clearRightSubTree(int idx) {
+        int right = idx * 2+1;
+        // 没有左子树，直接置空当前节点
+        if (right >= keys.length || keys[right] == null) {
+            keys[idx] = null;
+            values[idx] = null;
+            return;
+        }
+        // 左孩子顶替当前位置
+        keys[idx] = keys[right];
+        values[idx] = values[right];
+        // 递归处理原左孩子的位置（继续承接它的子树）
+        clearRightSubTree(right);
+    }
+
 
 
 }
