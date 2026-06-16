@@ -1,6 +1,7 @@
 package hashmap;
 
-import java.util.Collection;
+import java.util.*;
+import java.util.function.Consumer;
 
 /**
  *  A hash table-backed Map implementation. Provides amortized constant time
@@ -10,6 +11,16 @@ import java.util.Collection;
  *  @author Cirlnt
  */
 public class MyHashMap<K, V> implements Map61B<K, V> {
+
+    @Override
+    public Iterator<K> iterator() {
+        return null;
+    }
+
+    @Override
+    public void forEach(Consumer<? super K> action) {
+        Map61B.super.forEach(action);
+    }
 
     /**
      * Protected helper class to store key/value pairs
@@ -26,14 +37,19 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
     }
 
     /* Instance Variables */
+    int size = 0;
+    double maxLoad = 0.75;
     private Collection<Node>[] buckets;
     // You should probably define some more!
-    int size;
 
     /** Constructors */
-    public MyHashMap() { }
+    public MyHashMap() {
+        buckets = createTable(16);
+    }
 
-    public MyHashMap(int initialSize) { }
+    public MyHashMap(int initialSize) {
+        this.buckets = createTable(initialSize);
+    }
 
     /**
      * MyHashMap constructor that creates a backing array of initialSize.
@@ -42,13 +58,16 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
      * @param initialSize initial size of backing array
      * @param maxLoad maximum load factor
      */
-    public MyHashMap(int initialSize, double maxLoad) { }
+    public MyHashMap(int initialSize, double maxLoad) {
+        this.maxLoad = maxLoad;
+        this.buckets = createTable(initialSize);
+    }
 
     /**
      * Returns a new node to be placed in a hash table bucket
      */
     private Node createNode(K key, V value) {
-        return null;
+        return new Node(key, value);
     }
 
     /**
@@ -70,7 +89,7 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
      * OWN BUCKET DATA STRUCTURES WITH THE NEW OPERATOR!
      */
     protected Collection<Node> createBucket() {
-        return null;
+        return new LinkedList<>();
     }
 
     /**
@@ -83,10 +102,140 @@ public class MyHashMap<K, V> implements Map61B<K, V> {
      * @param tableSize the size of the table to create
      */
     private Collection<Node>[] createTable(int tableSize) {
+        return new Collection[tableSize];
+    }
+
+    //这里buckets是整个哈希表，用数组来表示，每个索引对应一个桶，每个桶可以用不同的数据结构，里面的对象都是节点Node
+    @Override
+    public void clear(){
+        for (int i = 0; i < buckets.length; i++) {
+            buckets[i] = null;
+        }
+        size = 0;
+    }
+
+    @Override
+    public boolean containsKey(K key) {
+        int hash = key.hashCode();
+        // 为了防止负数并映射到数组索引范围内，做一步处理
+        int index = (hash & 0x7fffffff) % buckets.length;
+        if (buckets[index] == null) {
+            buckets[index] = createBucket();
+            return false;
+        }
+        for (Node node : buckets[index]) {
+            if (node.key == null){
+                return false;
+            }
+            if (node.key.equals(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public V get(K key) {
+        int hash = key.hashCode();
+        int index = (hash & 0x7fffffff) % buckets.length;
+        if (buckets[index] == null) {
+            return null;
+        }
+        for (Node node : buckets[index]) {
+            if (node.key.equals(key)) {
+                return node.value;
+            }
+        }
         return null;
     }
 
-    // TODO: Implement the methods of the Map61B Interface below
+    @Override
+    public int size(){
+        return size;
+    }
+
+    @Override
+    public void put(K key, V value) {
+        int hash = key.hashCode();
+        int index = (hash & 0x7fffffff) % buckets.length;
+        if (buckets[index] != null) {
+            for (Node node : buckets[index]) {
+                if (node.key.equals(key)) {
+                    node.value = value;
+                    return;
+                }
+            }
+        }
+        Node node = createNode(key, value);
+        if (buckets[index] == null) {
+            buckets[index] = createBucket();
+        }
+        buckets[index].add(node);
+        size++;
+        if ((double) size /(buckets.length)>maxLoad){
+            reverse();
+        }
+
+    }
+
+    @Override
+    public Set<K> keySet() {
+        Set<K> set = new HashSet<>();
+        for (Collection<Node> bucket : buckets) {
+            if (bucket == null) {
+                continue;
+            }
+            for (Node node : bucket) {
+                    set.add(node.key);
+            }
+        }
+        return set;
+    }
+
+    @Override
+    public V remove(K key) {
+//        throw new UnsupportedOperationException("Not supported yet.");
+        int hash = key.hashCode();
+        int index = (hash & 0x7fffffff) % buckets.length;
+        if (buckets[index] != null) {
+            for (Node node : buckets[index]) {
+                if (node.key.equals(key)) {
+                    V values =  node.value;
+                    node.value = null;
+                    node.key = null;
+                    return values;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public V remove(K key, V value) {
+        throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    private void reverse(){
+        Collection<Node>[] newBuckets = new Collection[buckets.length*2];
+        for (int i = 0; i < buckets.length; i++) {
+            if (buckets[i] == null) {
+                continue;
+            }
+
+            for (Node node : buckets[i]) {
+                int hash = node.key.hashCode();
+                int index = (hash & 0x7fffffff) % newBuckets.length;
+                if (newBuckets[index] == null) {
+                    newBuckets[index] = createBucket();
+                }
+                newBuckets[index].add(node);
+            }
+        }
+        //不能用这个：System.arraycopy(buckets, 0, newBuckets, 0, buckets.length);
+        buckets = newBuckets;
+    }
+
+
     // Your code won't compile until you do so!
 
 }
