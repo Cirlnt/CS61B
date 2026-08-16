@@ -1,10 +1,9 @@
 package gitlet;
 
-// TODO: any imports you need here
 
 import java.io.Serializable;
 import java.io.File;
-import java.util.Date; // TODO: You'll likely use this in this class
+import java.util.Date;
 import java.util.HashMap;
 
 import static gitlet.Utils.sha1;
@@ -17,7 +16,6 @@ import static gitlet.Utils.sha1;
  */
 public class Commit implements Serializable {
     /**
-     * TODO: 在此处添加实例变量。
      *
      * List all instance variables of the Commit class here with a useful
      * comment above them describing what that variable represents and how that

@@ -3,6 +3,7 @@ package gitlet;
 import java.util.Date;
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 
 import static gitlet.Utils.*;
 
@@ -51,8 +52,8 @@ public class Repository {
      * Stages为暂存区，里面分为addStage和removeStage
      */
     public final File stages = Utils.join(GITLET_DIR, "stages");
-    public final File addStages = Utils.join(stages, "addstages");
-    public final File removeStages = Utils.join(stages, "removestages");
+    public final File addstages = Utils.join(stages, "addstages");
+    public final File removestages = Utils.join(stages, "removestages");
 
     /**
      * 定义需要创建的目录结构
@@ -95,8 +96,8 @@ public class Repository {
             Commit commit = new Commit("initial commit", new Date(0), null, null);
             String commitID = sha1(serialize(commit));
             writeObject(Utils.join(commits, commitID), commit); //将本次commit写入对应文件
-            writeContents(HEAD, "master");
-            writeContents(Utils.join(branches, "master"), commitID);
+            writeContents(HEAD, "master"); //HEAD指向当前分支name
+            writeContents(Utils.join(branches, "master"), commitID); //写入branches组里面对于分支master
         } else {
             System.out.println("A Gitlet version-control system already exists in the current directory.");
             System.exit(0);
@@ -104,5 +105,38 @@ public class Repository {
 
     }
 
-    //这里是获得treeID,HEAD指向当前提交分支，该提交分支指向最新commit，最新commit里面的tree为旧的commit里的tree加上stage里面的
+    public void add(String fileName) {
+        if (!GITLET_DIR.exists()) {
+            System.out.println("File does not exist.");
+            System.exit(0);
+        }
+        File file = new File(fileName); //这是即将add的文件，如果当前工作版本的文件与当前提交（commit）中的版本完全相同，则不要将其暂存
+        //这里是获得treeID,HEAD指向当前提交分支，该提交分支指向最新commit的ID，最新commit里面的tree为旧的commit里的tree加上stage里面的
+        String name = readObject(HEAD, String.class);
+        String commitID = readObject(Utils.join(branches,name),String.class);
+        String oldTreeID = readObject(Utils.join(commits,commitID),String.class);
+        HashMap<String,String> oldMap = readObject(Utils.join(trees,oldTreeID),HashMap.class); //已有的oldMap在最新的commit里面
+        for (String names : oldMap.keySet() ) {
+            if (fileName.equals(names)){
+                if (file.equals(oldMap.get(names))){
+                    return;
+                }
+                oldMap.remove(names);
+                oldMap.put(names,sha1(serialize(file)));  //put里面放filename, blobHash。而一个blob就是某个文件的某个版本
+            }
+        }
+        //TODO:并且如果它已经在暂存区中，应将其移除（这种情况可能发生在文件被修改、添加后又改回原始版本时）。该文件将不再被标记为待删除（参见 gitlet rm），即使执行该命令时它之前处于待删除状态。
+
+
+    }
+
+    public void rm(String fileName) {
+        if (!GITLET_DIR.exists()) {
+            System.out.println("File does not exist.");
+            System.exit(0);
+        }
+    }
+
 }
+
+

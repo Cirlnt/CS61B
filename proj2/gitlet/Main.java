@@ -19,9 +19,11 @@ public class Main {
                 new Repository().init();
                 break;
             case "add":
-                // TODO: handle the `add [filename]` command
+                String fileName = args[1];
+                new Repository().add(fileName);
                 break;
-            // TODO: FILL THE REST IN
+            case "rm":
+                new Repository().rm(args[1]);
         }
     }
 }
