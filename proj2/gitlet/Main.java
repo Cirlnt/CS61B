@@ -24,6 +24,17 @@ public class Main {
                 break;
             case "rm":
                 new Repository().rm(args[1]);
+                break;
+            case "commit":
+                if (args.length < 2 || args[1].isEmpty()){
+                    System.out.println("Please enter a commit message.");
+                }
+                else{
+                    String message = args[1];
+                    new Repository().commit(message);
+                }
+                break;
+
         }
     }
 }

@@ -4,7 +4,6 @@ package gitlet;
 import java.io.Serializable;
 import java.io.File;
 import java.util.Date;
-import java.util.HashMap;
 
 import static gitlet.Utils.sha1;
 
@@ -40,5 +39,21 @@ public class Commit implements Serializable {
 
     }
 
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(timestamp).append("\n");
+        sb.append(message).append("\n");
+        sb.append(parentID).append("\n");
+        sb.append(treeID).append("\n");
+        return sb.toString();
+    }
 
+    public String getHash(){
+        return sha1(toString());
+    }
+
+
+    public String getTreeID() {
+        return treeID;
+    }
 }

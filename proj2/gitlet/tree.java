@@ -1,24 +1,27 @@
 package gitlet;
 
 import java.io.File;
-import java.util.HashMap;
+import java.util.TreeMap;
 
+import static gitlet.Utils.sha1;
 import static gitlet.Utils.writeObject;
 
-public class tree<K,V> extends HashMap<K,V> {
+public class tree<K,V> extends TreeMap<K,V> {
     //tree文件里面放的是type[]，为对应HashMap的序列化，类里面还是HashMap
 
 
-    private HashMap<K, V> map;
+    private TreeMap<K, V> map;
 
     public tree() {
-        this.map = new HashMap<>();
+        this.map = new TreeMap<>();
     }
 
-    // 提供方法往 Tree 里添加文件
-    public void addFile(K filename, V blobHash) {
-        map.put(filename, blobHash);
+    public tree(TreeMap<K, V> map) {
+        this.map = map;
     }
+
+
+
 
 
 }
