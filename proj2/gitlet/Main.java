@@ -34,7 +34,27 @@ public class Main {
                     new Repository().commit(message);
                 }
                 break;
-
+            case "log":
+                new Repository().log();
+                break;
+            case "global-log":
+                new Repository().globalLog();
+                break;
+            case "find":
+                new Repository().find(args[1]);
+                break;
+            case "status":
+                new Repository().status();
+                break;
+            case "checkout":
+                if (args.length == 2) {                       // checkout [branch name]
+                    new Repository().checkout3(args[1]);
+                } else if (args.length == 3 && args[1].equals("--")) {   // checkout -- [file]
+                    new Repository().checkout1(args[2]);
+                } else if (args.length == 4 && args[2].equals("--")) {   // checkout [id] -- [file]
+                    new Repository().checkout2(args[1], args[3]);
+                }
+                break;
         }
     }
 }

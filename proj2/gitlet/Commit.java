@@ -4,11 +4,12 @@ package gitlet;
 import java.io.Serializable;
 import java.io.File;
 import java.util.Date;
+import java.util.Formatter;
+import java.util.Locale;
 
 import static gitlet.Utils.sha1;
 
 /** Represents a gitlet commit object.
- *  TODO: 最好在这里描述一下这个类（Class）还有什么其他功能。
  *  does at a high level.
  *
  *  @author Cirlnt
@@ -56,4 +57,26 @@ public class Commit implements Serializable {
     public String getTreeID() {
         return treeID;
     }
+
+
+    public String getParentID() {
+        return parentID;
+    }
+
+    public void printCommit(){
+        Formatter fmt = new Formatter(Locale.ENGLISH);
+        fmt.format("%1$ta %1$tb %1$te %1$tH:%1$tM:%1$tS %1$tY %1$tz", timestamp);
+//        fmt.format("%ta %tb %te %tH:%tM:%tS %tY %tz", timestamp);
+        String s = fmt.toString();
+        System.out.println("===");
+        System.out.println("commit" + " " +getHash());
+        System.out.println("Date:" + " " + s);
+        System.out.println(message);
+        System.out.println();
+    }
+
+    public String getMessage(){
+        return message;
+    }
+
 }
