@@ -55,6 +55,15 @@ public class Main {
                     new Repository().checkout2(args[1], args[3]);
                 }
                 break;
+            case "branch":
+                new Repository().branch(args[1]);
+                break;
+            case "rm-branch":
+                new Repository().rmBranch(args[1]);
+                break;
+            case "reset":
+                new Repository().reset(args[1]);
+                break;
         }
     }
 }

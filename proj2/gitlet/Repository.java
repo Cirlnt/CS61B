@@ -321,7 +321,8 @@ public class Repository {
     /** checkout [提交ID] -- [文件名]
      * 取出该文件在指定提交 ID 对应的提交中的版本，放到工作目录中。如果工作目录中已存在同名文件，则直接覆盖。新取出的文件不会被暂存。
      */
-    public void checkout2(String commitID,String fileName){
+    public void checkout2(String shortID,String fileName){
+        String commitID = findCommitId(shortID);
         List<String> commitIds = Utils.plainFilenamesIn(commits);
         if (!commitIds.contains(commitID)){
             System.out.println("No commit with that id exists.");
@@ -392,6 +393,70 @@ public class Repository {
         writeContents(HEAD,branchName);
     }
 
+    public void branch(String branchName){
+        List<String> branchesNames = Utils.plainFilenamesIn(branches);
+        if (branchesNames.contains(branchName)){
+            System.out.println("A branch with that name already exists.");
+            return;
+        }
+        String HeadBranchName = readContentsAsString(HEAD);
+        String commitID = readContentsAsString(Utils.join(branches, HeadBranchName));
+        writeContents(Utils.join(branches, branchName), commitID);
+    }
+
+    public void rmBranch(String branchName){
+        List<String> branchesNames = Utils.plainFilenamesIn(branches);
+        if (!branchesNames.contains(branchName)){
+            System.out.println("A branch with that name does not exist.");
+            return;
+        }
+        String HeadBranch = readContentsAsString(HEAD);
+        if (HeadBranch.equals(branchName)){
+            System.out.println("Cannot remove the current branch.");
+            return;
+        }
+        File branchFile = Utils.join(branches, branchName);
+        branchFile.delete();
+    }
+
+    //检出指定提交所跟踪的所有文件。删除那些不在该提交中、但被当前跟踪的文件。同时，将当前分支的 head 指针移动到该提交节点。
+    public void reset(String shortID){
+        String commitID = findCommitId(shortID);
+        File commitFile = Utils.join(commits, commitID);
+        if (!commitFile.exists()) {
+            System.out.println("No commit with that id exists.");
+            return;
+        }
+
+        Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
+        TreeMap<String,String> map = readObject(Utils.join(trees, commit.getTreeID()), TreeMap.class);//指定提交跟踪的文件
+        TreeMap<String,String> oldMap = researchOldTree(); //被当前跟踪的文件
+        //如果工作目录中存在一个在当前分支中未被跟踪的文件，而 reset 操作会覆盖它，则打印：There is an untracked file in the way; delete it, or add and commit it first. 并退出；
+        for (String fileName : map.keySet()){
+            File workFile = new File(fileName);
+            if (workFile.exists()&&!oldMap.containsKey(fileName)){
+                System.out.println("There is an untracked file in the way; delete it, or add and commit it first.");
+                return;
+            }
+        }
+        for (String name : oldMap.keySet()){
+            if (!map.containsKey(name)){
+                File f = new File(name);
+                f.delete();
+            }
+        }
+        for (String filename : map.keySet()) {
+            String blobId = map.get(filename);
+            byte[] content = readObject(Utils.join(blobs, blobId), byte[].class);
+            writeContents(new File(filename), content);
+        }
+
+        String headBranchName = readContentsAsString(HEAD);
+        writeContents(Utils.join(branches, headBranchName), commitID);
+        writeObject(addstages, new TreeMap<String, String>());
+        writeObject(removestages, new TreeMap<String, String>());
+    }
+
     /**
      * 这里是获得treeID,HEAD指向当前提交分支，该提交分支指向最新commit的ID，最新commit里面的tree为旧的commit里的tree加上stage里面的
      * 也就是被跟踪的文件
@@ -459,6 +524,27 @@ public class Repository {
         known.addAll(addMap.keySet());
         known.addAll(rmMap.keySet());
         return known;
+    }
+
+    private String findCommitId(String shortId) {
+        // 如果已经是完整 ID（40位），直接返回
+        if (shortId.length() == 40) {
+            return shortId;
+        }
+
+        List<String> commitIds = Utils.plainFilenamesIn(commits);
+        String matched = null;
+
+        for (String commitId : commitIds) {
+            if (commitId.startsWith(shortId)) {
+                if (matched != null) {
+                    // 匹配到多个，不唯一
+                    return null;
+                }
+                matched = commitId;
+            }
+        }
+        return matched;
     }
 
 
