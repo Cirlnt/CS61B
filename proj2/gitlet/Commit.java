@@ -29,6 +29,7 @@ public class Commit implements Serializable {
     private Date timestamp;
     private String treeID;    // 指向的树ID，初始提交为 null
     private String parentID;  // 父提交ID，初始提交为 null
+    private String parentID2;
 
     //默认为初始提交，message为initial commit
     public Commit(String message, Date timestamp, String treeID, String parentID) {
@@ -38,6 +39,11 @@ public class Commit implements Serializable {
         this.parentID = parentID;
         //HEAD指向当前分支eg:master，当前分支指向最新的commit,最新commit里面的tree为旧的commit里的tree加上stage里面的,这里的commit为旧的,因为这个函数叫构造函数
 
+    }
+
+    // 设置第二个父提交
+    public void setParent2(String parent2) {
+        this.parentID2 = parent2;
     }
 
     public String toString() {

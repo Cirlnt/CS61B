@@ -93,7 +93,8 @@ class Utils {
 
     /** Return the entire contents of FILE as a byte array.  FILE must
      *  be a normal file.  Throws IllegalArgumentException
-     *  in case of problems. */
+     *  in case of problems.
+     *  适用：文件本身就是原始字节数据，不是序列化后的对象 */
     static byte[] readContents(File file) {
         if (!file.isFile()) {
             throw new IllegalArgumentException("must be a normal file");
@@ -138,7 +139,8 @@ class Utils {
     }
 
     /** Return an object of type T read from FILE, casting it to EXPECTEDCLASS.
-     *  Throws IllegalArgumentException in case of problems. */
+     *  Throws IllegalArgumentException in case of problems.
+     *  适用文件不能是普通原始字节！它必须是**序列化后的对象文件**。*/
     static <T extends Serializable> T readObject(File file,
                                                  Class<T> expectedClass) {
         try {

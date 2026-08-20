@@ -447,7 +447,8 @@ public class Repository {
         }
         for (String filename : map.keySet()) {
             String blobId = map.get(filename);
-            byte[] content = readObject(Utils.join(blobs, blobId), byte[].class);
+//            byte[] content = readObject(Utils.join(blobs, blobId), byte[].class);blob 是原始字节，不是序列化对象
+            byte[] content = readContents(Utils.join(blobs,blobId));
             writeContents(new File(filename), content);
         }
 
@@ -455,6 +456,198 @@ public class Repository {
         writeContents(Utils.join(branches, headBranchName), commitID);
         writeObject(addstages, new TreeMap<String, String>());
         writeObject(removestages, new TreeMap<String, String>());
+    }
+
+    /**  将指定分支的文件合并到当前分支中。 */
+    public void merge(String branchName){
+        String currentHeadID = readContentsAsString(Utils.join(branches, readContentsAsString(HEAD))); //当前分支
+        String givenHeadID   = readContentsAsString(Utils.join(branches, branchName)); //指定分支
+        String splitCommitID = findSplitPoint(currentHeadID, givenHeadID);
+
+        Commit currentCommit = readObject(Utils.join(commits, currentHeadID), Commit.class);//当前分支
+        Commit givenCommit = readObject(Utils.join(commits, givenHeadID), Commit.class);//指定分支
+        Commit splitCommit = readObject(Utils.join(commits, splitCommitID), Commit.class);
+
+        TreeMap<String,String> currentMap = readObject(Utils.join(trees, currentCommit.getTreeID()), TreeMap.class);//当前
+        TreeMap<String,String> givenMap = readObject(Utils.join(trees, givenCommit.getTreeID()), TreeMap.class);//指定
+        TreeMap<String,String> splitMap = readObject(Utils.join(trees, splitCommit.getTreeID()), TreeMap.class);
+        //先检查失败情况:
+        TreeSet<String> allFile = allFiles();
+        String HeadBranchName = readContentsAsString(HEAD);
+        TreeMap<String,String> oldMap = researchOldTree(); // 获取当前被跟踪的所有文件（当前分支的文件映射中的文件名）
+        TreeMap<String,String> addmap = readObject(addstages, TreeMap.class);
+        TreeMap<String,String> removeMap = readObject(removestages, TreeMap.class);
+
+        List<String> branchesNames = Utils.plainFilenamesIn(branches);
+
+        //5.如果当前提交中一个未跟踪的文件会被合并覆盖或删除，打印 There is an untracked file in the way; delete it, or add and commit it first.
+        for (String fileName : allFile){
+            boolean track = oldMap.containsKey(fileName);
+            if (!track){
+//                 检查这个文件是否在指定分支中存在（会被覆盖）
+//                 或者在分裂点存在但指定分支删除了（会被删除）
+                if (givenMap.containsKey(fileName) || splitMap.containsKey(fileName)) {
+                    System.out.println("There is an untracked file in the way; delete it, or add and commit it first.");
+                    return;
+                }
+            }
+        }
+
+        //1.如果存在已暂存的添加或删除操作，打印 You have uncommitted changes.
+        if (!addmap.isEmpty()||!removeMap.isEmpty()){
+            System.out.println("You have uncommitted changes.");
+            return;
+        }
+        //2.如果指定名称的分支不存在，打印 A branch with that name does not exist.
+        if (!branchesNames.contains(branchName)){
+            System.out.println("A branch with that name does not exist.");
+            return;
+        }
+        //3.如果尝试将分支与自身合并，打印 Cannot merge a branch with itself.
+        if (HeadBranchName.equals(branchName)){
+            System.out.println("Cannot merge a branch with itself.");
+            return;
+        }
+        //4.如果合并产生的提交没有任何更改，让正常的提交错误消息正常输出即可。
+
+        // 一、确定分裂点：首先需要确定当前分支和指定分支的分裂点。分裂点是当前分支和指定分支头部的最近公共祖先
+//        String currentHeadID = readContentsAsString(Utils.join(branches, readContentsAsString(HEAD))); //当前分支
+//        String givenHeadID   = readContentsAsString(Utils.join(branches, branchName)); //指定分支
+//        String splitCommitID = findSplitPoint(currentHeadID, givenHeadID);
+        // 二、特殊情况处理
+        //1.如果分裂点与指定分支是同一个提交
+        if (splitCommitID.equals(givenHeadID)){
+            System.out.println("Given branch is an ancestor of the current branch.");
+            return;
+        }
+        //2.如果分裂点与当前分支是同一个提交：效果等同于检出指定分支
+        if (splitCommitID.equals(currentHeadID)){
+            String currentBranchName = readContentsAsString(HEAD);
+            checkoutCommitFiles(givenHeadID);                                    // 检出文件（效果 = "check out the given branch
+            writeContents(Utils.join(branches, currentBranchName), givenHeadID); // 当前分支指针前移
+            writeObject(addstages, new TreeMap<String,String>());              // 清暂存区
+            writeObject(removestages, new TreeMap<String,String>());
+            System.out.println("Current branch fast-forwarded.");
+            return;
+        }
+        // 三、文件合并规则
+        // 1.仅在指定分支中修改的文件,搬上去了
+//        Commit currentCommit = readObject(Utils.join(commits, currentHeadID), Commit.class);//当前分支
+//        Commit givenCommit = readObject(Utils.join(commits, givenHeadID), Commit.class);//指定分支
+//        Commit splitCommit = readObject(Utils.join(commits, splitCommitID), Commit.class);
+//
+//        TreeMap<String,String> currentMap = readObject(Utils.join(trees, currentCommit.getTreeID()), TreeMap.class);//当前
+//        TreeMap<String,String> givenMap = readObject(Utils.join(trees, givenCommit.getTreeID()), TreeMap.class);//指定
+//        TreeMap<String,String> splitMap = readObject(Utils.join(branches, splitCommit.getTreeID()), TreeMap.class);
+
+
+        TreeMap<String,String> addMap = new TreeMap<>();
+        TreeMap<String,String> rmMap = new TreeMap<>();
+        boolean hasConflict = false;
+
+        TreeSet<String> allFiles = new TreeSet<>();
+        allFiles.addAll(currentMap.keySet());
+        allFiles.addAll(givenMap.keySet());
+        allFiles.addAll(splitMap.keySet());
+
+        for (String fileName : allFiles){
+            String splitBlob = splitMap.get(fileName);     // 文件在分裂点不存在时为 null
+            String currentBlob = currentMap.get(fileName); // 文件在当前分支不存在时为 null
+            String givenBlob = givenMap.get(fileName);     // 文件在指定分支不存在时为 null
+            //用Object避免空指针
+            boolean givenChange = !Objects.equals(givenBlob, splitBlob); //指定
+            boolean currentChange = !Objects.equals(currentBlob, splitBlob);//指定
+            //1.仅在指定分支中修改的文件
+            if (givenChange && !currentChange&& givenBlob != null){
+                byte[] content = readContents(Utils.join(blobs, givenBlob));
+                Utils.writeContents(new File(fileName), content);
+                currentMap.put(fileName, givenBlob);
+                addMap.put(fileName, givenMap.get(fileName));
+            }
+            //2.仅在当前分支中修改的文件->currentChange && !givenChange不变
+            else if (currentChange && !givenChange){
+                continue;
+            }
+            //3.两个分支以相同方式修改的文件
+            else if (currentChange && givenChange && Objects.equals(currentBlob, givenBlob)){
+                continue;
+            }
+            //4.分裂点不存在、仅在当前分支存在的文件
+            else if (splitBlob==null && currentBlob!=null && givenBlob ==null){
+                continue;
+            }
+            //5.分裂点不存在、仅在指定分支存在的文件
+            else if (splitBlob==null && currentBlob==null && givenBlob !=null){
+                byte[] content = readContents(Utils.join(blobs, givenBlob));
+                Utils.writeContents(new File(fileName), content);
+                currentMap.put(fileName, givenBlob);
+                addMap.put(fileName, givenMap.get(fileName));
+            }
+            //6.分裂点存在、当前分支未修改、指定分支中已删除的文件 -> 应被删除（并取消跟踪）
+            else if (splitBlob!=null && !currentChange && givenBlob ==null){
+                File workFile = new File(fileName);
+                if (workFile.exists()) {
+                    workFile.delete();
+                }
+                currentMap.remove(fileName);
+                rmMap.put(fileName, splitBlob);
+            }
+            //7.分裂点存在、指定分支未修改、当前分支中已删除的文件
+            else if (splitBlob!=null && !givenChange && currentBlob ==null){
+                continue;
+            }
+            // 四、冲突处理
+            else{
+                hasConflict = true;
+                byte[] currentContent;
+                if (currentBlob != null) {
+                    currentContent = readContents(Utils.join(blobs, currentBlob));
+                } else {
+                    currentContent = new byte[0]; //new byte[0] 就是创建一个长度为 0 的空字节数组
+                }
+
+                byte[] givenContent;
+                if (givenBlob != null) {
+                    givenContent = readContents(Utils.join(blobs, givenBlob));
+                } else {
+                    givenContent = new byte[0];
+                }
+
+                String conflictContent = "<<<<<<< HEAD\n"
+                        + new String(currentContent)
+                        + "=======\n"
+                        + new String(givenContent)
+                        + "\n"
+                        + ">>>>>>>\n";
+                writeContents(new File(fileName), conflictContent);
+                currentMap.put(fileName, givenBlob); // 或者存冲突后的 hash
+                addMap.put(fileName, givenBlob);
+            }
+        }
+        writeObject(addstages, addMap);
+        writeObject(removestages, rmMap);
+
+        //五、合并提交
+        //1.如果分裂点既不是当前分支也不是指定分支，合并会自动提交
+        if (!hasConflict){
+            if (!splitCommitID.equals(currentHeadID) && !splitCommitID.equals(givenHeadID)){
+                String logMessage = "Merged " + branchName + " into " + readContentsAsString(HEAD) + ".";
+                String treeID = treeHash(currentMap);
+                writeObject(Utils.join(trees, treeID), currentMap);
+                Commit mergeCommit = new Commit(logMessage, new Date(),treeID,currentHeadID);
+                mergeCommit.setParent2(givenHeadID);
+                String mergeCommitID = mergeCommit.getHash();
+                writeObject(Utils.join(commits, mergeCommitID), mergeCommit);
+
+                // 更新当前分支的指针
+                writeObject(Utils.join(branches, readContentsAsString(HEAD)), mergeCommitID);
+            }
+
+        }
+        else{
+            System.out.println("Encountered a merge conflict.");
+        }
+
     }
 
     /**
@@ -546,6 +739,80 @@ public class Repository {
         }
         return matched;
     }
+
+    /** 把 commitID 对应提交的所有文件检出到工作目录。
+     *  只铺文件，不碰 HEAD、不碰分支指针、不清暂存。 */
+    private void checkoutCommitFiles(String commitID) {
+        Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
+        TreeMap<String,String> targetTree;
+        if (commit.getTreeID() == null) {
+            targetTree = new TreeMap<>();
+        } else {
+            targetTree = readObject(Utils.join(trees, commit.getTreeID()), TreeMap.class);
+        }
+        // 1. 写目标树里的所有文件
+        for (Map.Entry<String,String> e : targetTree.entrySet()) {
+            writeContents(new File(e.getKey()), readContents(Utils.join(blobs, e.getValue())));
+        }
+        // 2. 删除「当前分支追踪、但目标树没有」的文件
+        TreeMap<String,String> currentTree = researchOldTree();
+        for (String f : currentTree.keySet()) {
+            if (!targetTree.containsKey(f)) {
+                new File(f).delete();
+            }
+        }
+    }
+
+
+    /** 返回 commit 的所有父提交 id（merge 提交有两个父，普通提交一个）。 */
+    private List<String> parentsOf(Commit c) {
+        List<String> parents = new ArrayList<>();
+        if (c.getParentID() != null) {
+            parents.add(c.getParentID());
+        }
+        // TODO: merge 实现后加第二个 parent
+//         if (c.getSecondParentID() != null) parents.add(c.getSecondParentID());
+        return parents;
+    }
+
+    /** 从 headCommitID 出发 BFS，返回 map：commit id -> 到 head 的最短距离。 */
+    private Map<String,Integer> bfsDistances(String headCommitID) {
+        Map<String,Integer> dist = new HashMap<>();
+        ArrayDeque<String> queue = new ArrayDeque<>();
+        dist.put(headCommitID, 0);
+        queue.add(headCommitID);
+        while (!queue.isEmpty()) {
+            String id = queue.removeFirst();
+            Commit c = readObject(Utils.join(commits, id), Commit.class);
+            for (String parent : parentsOf(c)) {
+                if (!dist.containsKey(parent)) {        // 没访问过 = 第一次到达 = 最短
+                    dist.put(parent, dist.get(id) + 1);
+                    queue.add(parent);
+                }
+            }
+        }
+        return dist;
+    }
+
+    /** 找 currentHead 和 givenHead 的分裂点（最近公共祖先）。 */
+    private String findSplitPoint(String currentHeadID, String givenHeadID) {
+        Map<String,Integer> distA = bfsDistances(currentHeadID);
+        Map<String,Integer> distB = bfsDistances(givenHeadID);
+        String split = null;
+        int best = Integer.MAX_VALUE;
+        for (String id : distA.keySet()) {
+            if (distB.containsKey(id)) {                // 共同祖先
+                int sum = distA.get(id) + distB.get(id);
+                if (sum < best) {
+                    best = sum;
+                    split = id;
+                }
+            }
+        }
+        return split;
+    }
+
+
 
 
 
