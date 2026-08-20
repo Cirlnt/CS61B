@@ -5,6 +5,7 @@ import java.io.ObjectOutputStream;
 import java.util.*;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 import static gitlet.Utils.*;
 
@@ -125,6 +126,7 @@ public class Repository {
             rmMap.remove(fileName);
         } else {
             addMap.put(fileName, hash);
+            rmMap.remove(fileName);
             writeContents(Utils.join(blobs, hash), readContents(file));
         }
         writeObject(addstages, addMap);
@@ -192,14 +194,17 @@ public class Repository {
     }
 
     public void log(){
-        //TODO: 从当前 head 指向的提交开始，沿着提交树反向显示每个提交的信息，一直追溯到初始提交。
-        //todo：遍历过程中只跟随第一个父提交的链接，忽略合并提交中的第二个父提交。
-        //TODO: 关于merge的操作还没写
-        //需要commitID，timestamp，message
+        // 从当前 head 指向的提交开始，沿第一父提交反向遍历到初始提交；
+        // 忽略合并提交的第二个父提交。
         String branchName = readContentsAsString(HEAD);
         String commitID = readContentsAsString(Utils.join(branches, branchName));
         Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
-        logHelper(commit);
+        while (commit != null) {
+            commit.printCommit();
+            String parentID = commit.getParentID();
+            commit = (parentID == null) ? null
+                    : readObject(Utils.join(commits, parentID), Commit.class);
+        }
     }
 
     public void globalLog(){
@@ -323,19 +328,23 @@ public class Repository {
      */
     public void checkout2(String shortID,String fileName){
         String commitID = findCommitId(shortID);
-        List<String> commitIds = Utils.plainFilenamesIn(commits);
-        if (!commitIds.contains(commitID)){
+        if (commitID == null) {
+            System.out.println("No commit with that id exists.");
+            return;
+        }
+        File commitFile = Utils.join(commits, commitID);
+        if (!commitFile.exists()) {
             System.out.println("No commit with that id exists.");
             return;
         }
         Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
-        TreeMap<String,String> Map = readObject(Utils.join(trees, commit.getTreeID()), TreeMap.class);
-        String BlobHash = Map.get(fileName);
-        if (BlobHash == null){
+        TreeMap<String,String> map = researchTree(commit);
+        String blobHash = map.get(fileName);
+        if (blobHash == null){
             System.out.println("File does not exist in that commit.");
             return;
         }
-        byte[] content = readContents(Utils.join(blobs, BlobHash));//文件内容
+        byte[] content = readContents(Utils.join(blobs, blobHash));//文件内容
         File file = new File(fileName);                             // 工作目录
         writeContents(file, content);
     }
@@ -346,33 +355,25 @@ public class Repository {
      * 当前分支中被跟踪、但在目标分支中不存在的文件会被删除。暂存区会被清空，除非 checkout 的目标分支就是当前分支
      */
     public void checkout3(String branchName){
-        TreeSet<String> know = allFiles(); //.gitlet已知文件
-        String HeadBranchName = readContentsAsString(HEAD);
-        List<String> workFiles = Utils.plainFilenamesIn(CWD); //工作目录所有文件
-        String targetcommitID = readContentsAsString(Utils.join(branches, branchName));
-        Commit targetCommit = readObject(Utils.join(commits, targetcommitID), Commit.class);
+        String headBranchName = readContentsAsString(HEAD);
         List<String> branchesNames = Utils.plainFilenamesIn(branches); //branch的所有文件名
         if (!branchesNames.contains(branchName)){
             System.out.println("No such branch exists.");
             return;
         }
-        if (HeadBranchName.equals(branchName)){
+        if (headBranchName.equals(branchName)){
             System.out.println("No need to checkout the current branch.");
             return;
         }
-        TreeMap<String,String> targetTree;  //指定分支的 head 提交中的所有文件,也就是commit的对应tree
-        if (targetCommit.getTreeID() == null) {
-            targetTree = new TreeMap<>();
-        } else {
-            targetTree = readObject(Utils.join(trees, targetCommit.getTreeID()), TreeMap.class);
-        }
-        TreeMap<String,String> oldMap = researchOldTree(); //当前分支跟踪
-        TreeMap<String,String> addMap = readObject(addstages, TreeMap.class);
-        //工作目录里有一个文件（比如 hello.txt）
-        //这个文件没有被当前分支跟踪（即从未被 add 和 commit 过）
-        //你要 checkout 的目标分支里恰好也有一个同名文件 hello.txt
+        String targetCommitID = readContentsAsString(Utils.join(branches, branchName));
+        Commit targetCommit = readObject(Utils.join(commits, targetCommitID), Commit.class);
+        TreeMap<String,String> targetTree = researchTree(targetCommit); //目标分支跟踪的文件
+        TreeMap<String,String> oldMap = researchOldTree(); //当前分支跟踪的文件
+
+        //工作目录里存在「当前分支未跟踪、但目标分支会覆盖」的文件 → 报错退出
+        List<String> workFiles = Utils.plainFilenamesIn(CWD);
         for (String name : workFiles){
-            if (!oldMap.containsKey(name)&&(addMap.containsKey(name))&& targetTree.containsKey(name)){
+            if (!oldMap.containsKey(name) && targetTree.containsKey(name)){
                 System.out.println("There is an untracked file in the way; delete it, or add and commit it first.");
                 return;
             }
@@ -384,13 +385,12 @@ public class Repository {
         }
         for (String fileName : oldMap.keySet()){
             if (!targetTree.containsKey(fileName)){
-                File file = new File(fileName);
-                file.delete();
+                new File(fileName).delete();
             }
         }
         writeObject(addstages, new TreeMap<String, String>());
         writeObject(removestages, new TreeMap<String, String>());
-        writeContents(HEAD,branchName);
+        writeContents(HEAD, branchName);
     }
 
     public void branch(String branchName){
@@ -422,6 +422,10 @@ public class Repository {
     //检出指定提交所跟踪的所有文件。删除那些不在该提交中、但被当前跟踪的文件。同时，将当前分支的 head 指针移动到该提交节点。
     public void reset(String shortID){
         String commitID = findCommitId(shortID);
+        if (commitID == null) {
+            System.out.println("No commit with that id exists.");
+            return;
+        }
         File commitFile = Utils.join(commits, commitID);
         if (!commitFile.exists()) {
             System.out.println("No commit with that id exists.");
@@ -429,26 +433,24 @@ public class Repository {
         }
 
         Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
-        TreeMap<String,String> map = readObject(Utils.join(trees, commit.getTreeID()), TreeMap.class);//指定提交跟踪的文件
+        TreeMap<String,String> map = researchTree(commit);//指定提交跟踪的文件
         TreeMap<String,String> oldMap = researchOldTree(); //被当前跟踪的文件
-        //如果工作目录中存在一个在当前分支中未被跟踪的文件，而 reset 操作会覆盖它，则打印：There is an untracked file in the way; delete it, or add and commit it first. 并退出；
+        //如果工作目录中存在一个在当前分支中未被跟踪的文件，而 reset 操作会覆盖它，则报错退出
         for (String fileName : map.keySet()){
             File workFile = new File(fileName);
-            if (workFile.exists()&&!oldMap.containsKey(fileName)){
+            if (workFile.exists() && !oldMap.containsKey(fileName)){
                 System.out.println("There is an untracked file in the way; delete it, or add and commit it first.");
                 return;
             }
         }
         for (String name : oldMap.keySet()){
             if (!map.containsKey(name)){
-                File f = new File(name);
-                f.delete();
+                new File(name).delete();
             }
         }
         for (String filename : map.keySet()) {
             String blobId = map.get(filename);
-//            byte[] content = readObject(Utils.join(blobs, blobId), byte[].class);blob 是原始字节，不是序列化对象
-            byte[] content = readContents(Utils.join(blobs,blobId));
+            byte[] content = readContents(Utils.join(blobs, blobId));
             writeContents(new File(filename), content);
         }
 
@@ -460,55 +462,48 @@ public class Repository {
 
     /**  将指定分支的文件合并到当前分支中。 */
     public void merge(String branchName){
-        String currentHeadID = readContentsAsString(Utils.join(branches, readContentsAsString(HEAD))); //当前分支
-        String givenHeadID   = readContentsAsString(Utils.join(branches, branchName)); //指定分支
-        String splitCommitID = findSplitPoint(currentHeadID, givenHeadID);
+        String headBranchName = readContentsAsString(HEAD);
 
-        Commit currentCommit = readObject(Utils.join(commits, currentHeadID), Commit.class);//当前分支
-        Commit givenCommit = readObject(Utils.join(commits, givenHeadID), Commit.class);//指定分支
-        Commit splitCommit = readObject(Utils.join(commits, splitCommitID), Commit.class);
-
-        TreeMap<String,String> currentMap = readObject(Utils.join(trees, currentCommit.getTreeID()), TreeMap.class);//当前
-        TreeMap<String,String> givenMap = readObject(Utils.join(trees, givenCommit.getTreeID()), TreeMap.class);//指定
-        TreeMap<String,String> splitMap = readObject(Utils.join(trees, splitCommit.getTreeID()), TreeMap.class);
-        //先检查失败情况:
-        TreeSet<String> allFile = allFiles();
-        String HeadBranchName = readContentsAsString(HEAD);
-        TreeMap<String,String> oldMap = researchOldTree(); // 获取当前被跟踪的所有文件（当前分支的文件映射中的文件名）
+        // 失败检查（顺序遵循规范）
+        // 1. 存在已暂存的添加或删除 → You have uncommitted changes.
         TreeMap<String,String> addmap = readObject(addstages, TreeMap.class);
         TreeMap<String,String> removeMap = readObject(removestages, TreeMap.class);
-
-        List<String> branchesNames = Utils.plainFilenamesIn(branches);
-
-        //5.如果当前提交中一个未跟踪的文件会被合并覆盖或删除，打印 There is an untracked file in the way; delete it, or add and commit it first.
-        for (String fileName : allFile){
-            boolean track = oldMap.containsKey(fileName);
-            if (!track){
-//                 检查这个文件是否在指定分支中存在（会被覆盖）
-//                 或者在分裂点存在但指定分支删除了（会被删除）
-                if (givenMap.containsKey(fileName) || splitMap.containsKey(fileName)) {
-                    System.out.println("There is an untracked file in the way; delete it, or add and commit it first.");
-                    return;
-                }
-            }
-        }
-
-        //1.如果存在已暂存的添加或删除操作，打印 You have uncommitted changes.
-        if (!addmap.isEmpty()||!removeMap.isEmpty()){
+        if (!addmap.isEmpty() || !removeMap.isEmpty()){
             System.out.println("You have uncommitted changes.");
             return;
         }
-        //2.如果指定名称的分支不存在，打印 A branch with that name does not exist.
+        // 2. 指定名称的分支不存在
+        List<String> branchesNames = Utils.plainFilenamesIn(branches);
         if (!branchesNames.contains(branchName)){
             System.out.println("A branch with that name does not exist.");
             return;
         }
-        //3.如果尝试将分支与自身合并，打印 Cannot merge a branch with itself.
-        if (HeadBranchName.equals(branchName)){
+        // 3. 尝试将分支与自身合并
+        if (headBranchName.equals(branchName)){
             System.out.println("Cannot merge a branch with itself.");
             return;
         }
-        //4.如果合并产生的提交没有任何更改，让正常的提交错误消息正常输出即可。
+
+        // 读取两个 head 的 commit 与分裂点
+        String currentHeadID = readContentsAsString(Utils.join(branches, headBranchName));
+        String givenHeadID   = readContentsAsString(Utils.join(branches, branchName));
+        Commit currentCommit = readObject(Utils.join(commits, currentHeadID), Commit.class);
+        Commit givenCommit   = readObject(Utils.join(commits, givenHeadID), Commit.class);
+        String splitCommitID = findSplitPoint(currentHeadID, givenHeadID);
+        Commit splitCommit = readObject(Utils.join(commits, splitCommitID), Commit.class);
+
+        TreeMap<String,String> currentMap = researchTree(currentCommit);
+        TreeMap<String,String> givenMap   = researchTree(givenCommit);
+        TreeMap<String,String> splitMap   = researchTree(splitCommit);
+
+        // 4. 未跟踪文件会被合并覆盖 → 报错退出
+        List<String> workFiles = Utils.plainFilenamesIn(CWD);
+        for (String fileName : workFiles){
+            if (!currentMap.containsKey(fileName) && givenMap.containsKey(fileName)){
+                System.out.println("There is an untracked file in the way; delete it, or add and commit it first.");
+                return;
+            }
+        }
 
         // 一、确定分裂点：首先需要确定当前分支和指定分支的分裂点。分裂点是当前分支和指定分支头部的最近公共祖先
 //        String currentHeadID = readContentsAsString(Utils.join(branches, readContentsAsString(HEAD))); //当前分支
@@ -599,55 +594,48 @@ public class Repository {
             // 四、冲突处理
             else{
                 hasConflict = true;
-                byte[] currentContent;
-                if (currentBlob != null) {
-                    currentContent = readContents(Utils.join(blobs, currentBlob));
-                } else {
-                    currentContent = new byte[0]; //new byte[0] 就是创建一个长度为 0 的空字节数组
-                }
-
-                byte[] givenContent;
-                if (givenBlob != null) {
-                    givenContent = readContents(Utils.join(blobs, givenBlob));
-                } else {
-                    givenContent = new byte[0];
-                }
-
+                String currentContent = (currentBlob == null)
+                        ? "" : new String(readContents(Utils.join(blobs, currentBlob)), StandardCharsets.UTF_8);
+                String givenContent = (givenBlob == null)
+                        ? "" : new String(readContents(Utils.join(blobs, givenBlob)), StandardCharsets.UTF_8);
                 String conflictContent = "<<<<<<< HEAD\n"
-                        + new String(currentContent)
+                        + currentContent + "\n"
                         + "=======\n"
-                        + new String(givenContent)
-                        + "\n"
+                        + givenContent + "\n"
                         + ">>>>>>>\n";
-                writeContents(new File(fileName), conflictContent);
-                currentMap.put(fileName, givenBlob); // 或者存冲突后的 hash
-                addMap.put(fileName, givenBlob);
+                byte[] conflictBytes = conflictContent.getBytes(StandardCharsets.UTF_8);
+                writeContents(new File(fileName), conflictBytes);
+                String conflictBlob = sha1(conflictBytes);
+                writeContents(Utils.join(blobs, conflictBlob), conflictBytes);
+                currentMap.put(fileName, conflictBlob);
+                addMap.put(fileName, conflictBlob);
             }
         }
-        writeObject(addstages, addMap);
-        writeObject(removestages, rmMap);
-
-        //五、合并提交
-        //1.如果分裂点既不是当前分支也不是指定分支，合并会自动提交
-        if (!hasConflict){
-            if (!splitCommitID.equals(currentHeadID) && !splitCommitID.equals(givenHeadID)){
-                String logMessage = "Merged " + branchName + " into " + readContentsAsString(HEAD) + ".";
-                String treeID = treeHash(currentMap);
-                writeObject(Utils.join(trees, treeID), currentMap);
-                Commit mergeCommit = new Commit(logMessage, new Date(),treeID,currentHeadID);
-                mergeCommit.setParent2(givenHeadID);
-                String mergeCommitID = mergeCommit.getHash();
-                writeObject(Utils.join(commits, mergeCommitID), mergeCommit);
-
-                // 更新当前分支的指针
-                writeObject(Utils.join(branches, readContentsAsString(HEAD)), mergeCommitID);
-            }
-
-        }
-        else{
+        // 冲突：暂存结果但不自动提交，让用户解决后手动 commit
+        if (hasConflict){
+            writeObject(addstages, addMap);
+            writeObject(removestages, rmMap);
             System.out.println("Encountered a merge conflict.");
+            return;
         }
 
+        // 合并未产生任何更改 → 输出正常提交错误
+        if (addMap.isEmpty() && rmMap.isEmpty()){
+            System.out.println("No changes added to the commit.");
+            return;
+        }
+
+        // 自动提交合并
+        String logMessage = "Merged " + branchName + " into " + headBranchName + ".";
+        String treeID = treeHash(currentMap);
+        writeObject(Utils.join(trees, treeID), currentMap);
+        Commit mergeCommit = new Commit(logMessage, new Date(), treeID, currentHeadID);
+        mergeCommit.setParent2(givenHeadID);
+        String mergeCommitID = mergeCommit.getHash();
+        writeObject(Utils.join(commits, mergeCommitID), mergeCommit);
+        writeContents(Utils.join(branches, headBranchName), mergeCommitID);
+        writeObject(addstages, new TreeMap<String,String>());
+        writeObject(removestages, new TreeMap<String,String>());
     }
 
     /**
@@ -658,6 +646,11 @@ public class Repository {
         String branchName = readContentsAsString(HEAD);
         String commitID = readContentsAsString(Utils.join(branches, branchName));
         Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
+        return researchTree(commit);
+    }
+
+    /** 返回某个 commit 对应的 tree；初始提交 treeID 为 null，返回空 map。 */
+    private TreeMap<String,String> researchTree(Commit commit){
         if (commit.getTreeID() == null) {
             return new TreeMap<>();
         }
@@ -677,17 +670,6 @@ public class Repository {
         }
         String hash = sha1(sb.toString());
         return hash;
-    }
-
-    private void logHelper(Commit commit){
-        //先打印当前提交
-        commit.printCommit();
-        //如果有父提交，继续递归
-        String parentID = commit.getParentID();
-        if (parentID != null) {
-            Commit parentCommit = readObject(Utils.join(commits, parentID), Commit.class);
-            logHelper(parentCommit);
-        }
     }
 
     /** 工作目录中文件当前内容的 hash；文件不存在返回 null。 */
@@ -744,12 +726,7 @@ public class Repository {
      *  只铺文件，不碰 HEAD、不碰分支指针、不清暂存。 */
     private void checkoutCommitFiles(String commitID) {
         Commit commit = readObject(Utils.join(commits, commitID), Commit.class);
-        TreeMap<String,String> targetTree;
-        if (commit.getTreeID() == null) {
-            targetTree = new TreeMap<>();
-        } else {
-            targetTree = readObject(Utils.join(trees, commit.getTreeID()), TreeMap.class);
-        }
+        TreeMap<String,String> targetTree = researchTree(commit);
         // 1. 写目标树里的所有文件
         for (Map.Entry<String,String> e : targetTree.entrySet()) {
             writeContents(new File(e.getKey()), readContents(Utils.join(blobs, e.getValue())));
@@ -770,8 +747,9 @@ public class Repository {
         if (c.getParentID() != null) {
             parents.add(c.getParentID());
         }
-        // TODO: merge 实现后加第二个 parent
-//         if (c.getSecondParentID() != null) parents.add(c.getSecondParentID());
+        if (c.getSecondParentID() != null) {
+            parents.add(c.getSecondParentID());
+        }
         return parents;
     }
 

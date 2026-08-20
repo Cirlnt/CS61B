@@ -46,6 +46,10 @@ public class Commit implements Serializable {
         this.parentID2 = parent2;
     }
 
+    public String getSecondParentID() {
+        return parentID2;
+    }
+
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(timestamp).append("\n");
