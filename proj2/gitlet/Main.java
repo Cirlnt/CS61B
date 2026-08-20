@@ -53,6 +53,8 @@ public class Main {
                     new Repository().checkout1(args[2]);
                 } else if (args.length == 4 && args[2].equals("--")) {   // checkout [id] -- [file]
                     new Repository().checkout2(args[1], args[3]);
+                } else {
+                    System.out.println("Incorrect operands.");
                 }
                 break;
             case "branch":
@@ -67,6 +69,8 @@ public class Main {
             case "merge":
                 new Repository().merge(args[1]);
                 break;
+            default:
+                System.out.println("No command with that name exists.");
         }
     }
 }

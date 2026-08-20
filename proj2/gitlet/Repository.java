@@ -89,6 +89,14 @@ public class Repository {
     }
 
 
+    /** 若当前目录未初始化（无 .gitlet），打印错误并退出（退出码 0）。 */
+    private void requireInit() {
+        if (!GITLET_DIR.exists()) {
+            System.out.println("Not in an initialized Gitlet directory.");
+            System.exit(0);
+        }
+    }
+
     public void init() {
         //如果不存在就set
         if (!GITLET_DIR.exists()) {
@@ -102,20 +110,16 @@ public class Repository {
             writeObject(removestages, new TreeMap<String, String>());
         } else {
             System.out.println("A Gitlet version-control system already exists in the current directory.");
-            System.exit(1);
         }
 
     }
 
     public void add(String fileName) {
-        if (!GITLET_DIR.exists()) {
-            System.out.println("File does not exist.");
-            System.exit(1);
-        }
+        requireInit();
         File file = new File(fileName); //这是即将add的文件，如果当前工作版本的文件与当前提交（commit）中的版本完全相同，则不要将其暂存
         if (!file.exists()) {
             System.out.println("File does not exist.");
-            System.exit(1);
+            return;
         }
         String hash = fileHash(file);
         TreeMap<String,String> addMap = readObject(addstages,TreeMap.class);  //addstages里面的Map
@@ -135,6 +139,7 @@ public class Repository {
     }
 
     public void rm(String fileName) {
+        requireInit();
         int is = 0;
         File file = new File(fileName); //这是即将rm的文件
         //如果该文件当前已被暂存（staged for addition），则取消暂存。
@@ -163,6 +168,7 @@ public class Repository {
     }
 
     public void commit(String Message) {
+        requireInit();
         String message =  Message;
         TreeMap<String,String> commitOldMap = researchOldTree();
         TreeMap<String,String> addMap = readObject(addstages,TreeMap.class);
@@ -194,6 +200,7 @@ public class Repository {
     }
 
     public void log(){
+        requireInit();
         // 从当前 head 指向的提交开始，沿第一父提交反向遍历到初始提交；
         // 忽略合并提交的第二个父提交。
         String branchName = readContentsAsString(HEAD);
@@ -208,6 +215,7 @@ public class Repository {
     }
 
     public void globalLog(){
+        requireInit();
         List<String> commitIds = Utils.plainFilenamesIn(commits);
         for (String id : commitIds){
             Commit commit = readObject(Utils.join(commits, id), Commit.class);
@@ -216,16 +224,23 @@ public class Repository {
     }
 
     public void find(String message) {
+        requireInit();
         List<String> commitIds = Utils.plainFilenamesIn(commits);
+        boolean found = false;
         for (String id : commitIds){
             Commit commit = readObject(Utils.join(commits, id), Commit.class);
             if (commit.getMessage().equals(message)){
                 System.out.println(id);
+                found = true;
             }
+        }
+        if (!found) {
+            System.out.println("Found no commit with that message.");
         }
     }
 
     public void status(){
+        requireInit();
         //先写branches
         List<String> branchNames = Utils.plainFilenamesIn(branches);
         String HeadName = readContentsAsString(HEAD);
@@ -312,6 +327,7 @@ public class Repository {
     /**  checkout -- [文件名]
      * 取出该文件在当前 head 提交中的版本，放到工作目录中。如果工作目录中已存在同名文件，则直接覆盖。新取出的文件不会被暂存。*/
     public void checkout1(String fileName){
+        requireInit();
         TreeMap<String,String> oldMap = researchOldTree();
         String BlobHash = oldMap.get(fileName); //当前head提交中的版本
         if (BlobHash == null){
@@ -327,6 +343,7 @@ public class Repository {
      * 取出该文件在指定提交 ID 对应的提交中的版本，放到工作目录中。如果工作目录中已存在同名文件，则直接覆盖。新取出的文件不会被暂存。
      */
     public void checkout2(String shortID,String fileName){
+        requireInit();
         String commitID = findCommitId(shortID);
         if (commitID == null) {
             System.out.println("No commit with that id exists.");
@@ -355,6 +372,7 @@ public class Repository {
      * 当前分支中被跟踪、但在目标分支中不存在的文件会被删除。暂存区会被清空，除非 checkout 的目标分支就是当前分支
      */
     public void checkout3(String branchName){
+        requireInit();
         String headBranchName = readContentsAsString(HEAD);
         List<String> branchesNames = Utils.plainFilenamesIn(branches); //branch的所有文件名
         if (!branchesNames.contains(branchName)){
@@ -394,6 +412,7 @@ public class Repository {
     }
 
     public void branch(String branchName){
+        requireInit();
         List<String> branchesNames = Utils.plainFilenamesIn(branches);
         if (branchesNames.contains(branchName)){
             System.out.println("A branch with that name already exists.");
@@ -405,6 +424,7 @@ public class Repository {
     }
 
     public void rmBranch(String branchName){
+        requireInit();
         List<String> branchesNames = Utils.plainFilenamesIn(branches);
         if (!branchesNames.contains(branchName)){
             System.out.println("A branch with that name does not exist.");
@@ -421,6 +441,7 @@ public class Repository {
 
     //检出指定提交所跟踪的所有文件。删除那些不在该提交中、但被当前跟踪的文件。同时，将当前分支的 head 指针移动到该提交节点。
     public void reset(String shortID){
+        requireInit();
         String commitID = findCommitId(shortID);
         if (commitID == null) {
             System.out.println("No commit with that id exists.");
@@ -462,6 +483,7 @@ public class Repository {
 
     /**  将指定分支的文件合并到当前分支中。 */
     public void merge(String branchName){
+        requireInit();
         String headBranchName = readContentsAsString(HEAD);
 
         // 失败检查（顺序遵循规范）
@@ -599,9 +621,9 @@ public class Repository {
                 String givenContent = (givenBlob == null)
                         ? "" : new String(readContents(Utils.join(blobs, givenBlob)), StandardCharsets.UTF_8);
                 String conflictContent = "<<<<<<< HEAD\n"
-                        + currentContent + "\n"
+                        + currentContent
                         + "=======\n"
-                        + givenContent + "\n"
+                        + givenContent
                         + ">>>>>>>\n";
                 byte[] conflictBytes = conflictContent.getBytes(StandardCharsets.UTF_8);
                 writeContents(new File(fileName), conflictBytes);
@@ -790,11 +812,7 @@ public class Repository {
         return split;
     }
 
-
-
-
-
-
+    
 }
 
 
